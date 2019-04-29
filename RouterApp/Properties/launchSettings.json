@@ -2,7 +2,7 @@
   "profiles": {
     "RouterApp": {
       "commandName": "Project",
-      "commandLineArgs": "2"
+      "commandLineArgs": "1"
     }
   }
 }

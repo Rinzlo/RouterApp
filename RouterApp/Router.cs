@@ -54,11 +54,11 @@ namespace RouterApp
             
 
             //TODO: start listener with file read port
-            StartListeners();
+            Start();
         }
 
         #region UDP
-        public static void OnReceive(IAsyncResult res)
+        public void OnReceive(IAsyncResult res)
         {
             (RouterState router, UdpClient listener) = ((RouterState, UdpClient))(res.AsyncState);
             IPEndPoint endPoint = router.EndPoint;
@@ -77,15 +77,17 @@ namespace RouterApp
             }
         }
 
-        private static void StartListeners()
+        private void Start()
         {
-            IPEndPoint groupEP = new IPEndPoint(IPAddress.Any, listenPort);
-            UdpClient listener = new UdpClient(listenPort);
+            foreach (RouterState router in servers)
+            {
+                UdpClient listener = new UdpClient(router.Port);
 
-            RouterState state = new RouterState(groupEP);
+                Console.WriteLine($"listening for messages on port[{router.Port}] and ip[{router.Ip}]");
+                listener.BeginReceive(new AsyncCallback(OnReceive), (router, listener));
+            }
 
-            Console.WriteLine($"listening for messages on port[{state.Port}] and ip[{state.Ip}]");
-            listener.BeginReceive(new AsyncCallback(OnReceive), (state, listener));
+
         }
 
         public void Send(RouterState destination, string msg)

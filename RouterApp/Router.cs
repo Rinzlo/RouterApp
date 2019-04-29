@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.IO;
+using System.Text.RegularExpressions;
 
 namespace RouterApp
 {
@@ -27,6 +28,8 @@ namespace RouterApp
                     $"\nIP: {servers[serverId-1].Ip}" +
                     $"\nPORT: {servers[serverId - 1].Port}"; } }
 
+        private UdpClient listener;
+
         public int ServerCount { get { return servers.Length; } }
 
         RouterState[] servers;
@@ -40,12 +43,10 @@ namespace RouterApp
         int numEdges;
         int serverId;
 
-        private static int listenPort;
 
         public Router(int id = 1)
         {
             ReadTopFile(id);
-            listenPort = servers[serverId-1].Port;
             DisplayTopFile();
             DisplayTable();
             Console.WriteLine(Info);
@@ -60,7 +61,8 @@ namespace RouterApp
         #region UDP
         public void OnReceive(IAsyncResult res)
         {
-            (int id, UdpClient listener) = ((int, UdpClient))(res.AsyncState);
+            (int id, UdpClient client) = ((int, UdpClient))res.AsyncState;
+            listener = client;
             IPEndPoint endPoint = servers[id].EndPoint;
 
             try
@@ -70,23 +72,34 @@ namespace RouterApp
 
                 Console.WriteLine($"Received: {receiveString}");
 
-                listener.BeginReceive(new AsyncCallback(OnReceive), ((RouterState)(res.AsyncState)));
+                listener.BeginReceive(new AsyncCallback(OnReceive), res.AsyncState);
             } catch (Exception e)
             {
                 Console.WriteLine(e.StackTrace);
             }
         }
+        public void Send(RouterState destination, string msg)
+        {
+            Socket s = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+
+            IPEndPoint ep = destination.EndPoint;
+
+            byte[] sendbuf = Encoding.ASCII.GetBytes(msg);
+
+            s.SendTo(sendbuf, ep);
+
+            Console.WriteLine("Message sent to the broadcast address");
+        }
+        #endregion
 
         private void Run()
         {
             // initializes listeners.
-            for (int i = 0; i < servers.Length; i++)
-            {
-                UdpClient listener = new UdpClient(servers[i].Port);
+            RouterState myServer = servers[serverId - 1];
+            listener = new UdpClient(myServer.Port);
 
-                Console.WriteLine($"listening for messages on port[{servers[i].Port}] and ip[{servers[i].Ip}]");
-                listener.BeginReceive(new AsyncCallback(OnReceive), (i + 1, listener));
-            }
+            Console.WriteLine($"listening for messages on port[{myServer.Port}] and ip[{myServer.Ip}]");
+            listener.BeginReceive(new AsyncCallback(OnReceive), (serverId, listener));
 
             string line = "";
 
@@ -188,14 +201,27 @@ namespace RouterApp
                                 );
                             break;
                         }
+                    case var val when new Regex(@"^send\s+(\d{1})\s+(.+)$").IsMatch(val):
+                        {
+                            var m = new Regex(@"^send\s+(\d{1})\s+(.+)$").Match(line);
+                            int id = Int32.Parse(m.Groups[1].Captures[0].Value);
+                            string msg = m.Groups[2].Captures[0].Value;
+
+                            if (msg.Length > 100)
+                            {
+                                Console.WriteLine("Error: message must be 100 characters or less");
+                            }
+                            else
+                            {
+                                Send(servers[id - 1], msg);
+                                Console.WriteLine("Message sent to peer with id " + id.ToString());
+                            }
+                            break;
+                        }
                     case "exit":
                         {
                             Console.WriteLine("All connections closing, good bye...");
-                            /* end listeners
-                            foreach ((int id, string address, int port) in peerManager.GetPeerList())
-                            {
-                                peerManager.TerminatePeer(id);
-                            }
+                            /* end listener */
                             /**/
                             Console.WriteLine("Terminating connections");
                             return;
@@ -208,21 +234,8 @@ namespace RouterApp
                 }
                 Console.WriteLine();
             }
+            listener.Close();
         }
-
-        public void Send(RouterState destination, string msg)
-        {
-            Socket s = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-
-            IPEndPoint ep = destination.EndPoint;
-
-            byte[] sendbuf = Encoding.ASCII.GetBytes(msg);
-
-            s.SendTo(sendbuf, ep);
-
-            Console.WriteLine("Message sent to the broadcast address");
-        }
-        #endregion
 
         #region fileIO
         public void Setup(int servCount)

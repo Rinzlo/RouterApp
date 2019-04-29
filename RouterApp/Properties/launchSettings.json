@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "RouterApp": {
+      "commandName": "Project",
+      "commandLineArgs": "2"
+    }
+  }
+}

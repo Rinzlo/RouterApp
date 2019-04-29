@@ -54,14 +54,14 @@ namespace RouterApp
             
 
             //TODO: start listener with file read port
-            Start();
+            Run();
         }
 
         #region UDP
         public void OnReceive(IAsyncResult res)
         {
-            (RouterState router, UdpClient listener) = ((RouterState, UdpClient))(res.AsyncState);
-            IPEndPoint endPoint = router.EndPoint;
+            (int id, UdpClient listener) = ((int, UdpClient))(res.AsyncState);
+            IPEndPoint endPoint = servers[id].EndPoint;
 
             try
             {
@@ -77,17 +77,137 @@ namespace RouterApp
             }
         }
 
-        private void Start()
+        private void Run()
         {
-            foreach (RouterState router in servers)
+            // initializes listeners.
+            for (int i = 0; i < servers.Length; i++)
             {
-                UdpClient listener = new UdpClient(router.Port);
+                UdpClient listener = new UdpClient(servers[i].Port);
 
-                Console.WriteLine($"listening for messages on port[{router.Port}] and ip[{router.Ip}]");
-                listener.BeginReceive(new AsyncCallback(OnReceive), (router, listener));
+                Console.WriteLine($"listening for messages on port[{servers[i].Port}] and ip[{servers[i].Ip}]");
+                listener.BeginReceive(new AsyncCallback(OnReceive), (i + 1, listener));
             }
 
+            string line = "";
 
+            Console.WriteLine("Type [help] for a list of commands...\n");
+
+            while ((line = Console.ReadLine()) != null)
+            {
+                Console.WriteLine();
+
+                switch (line)
+                {
+                    case "DVTEST":
+                        {
+                            DVA d1 = new DVA();
+                            int[] updateRow2 = { 7, 0, 2, int.MaxValue };
+                            int[] updateRow3 = { 4, 2, 0, 1 };
+                            int[] updateRow4 = { 3, int.MaxValue, 0, 0 };
+
+                            d1.ReadTopFile();
+                            d1.UpdateRow(2, updateRow2);
+                            d1.UpdateRow(3, updateRow3);
+                            d1.UpdateRow(4, updateRow4);
+                            d1.DVectorAlg();
+                            d1.Display();
+                            break;
+                        }
+
+                    case "help":
+                        {
+                            Console.WriteLine("Commands:\n" +
+                                "\n" +
+                                "server -t <topology-file-name> -i <routing-update-interval> topology-file-name:" +
+                                "\n" +
+                                "\tThe topology file contains the initial topology configuration for the server, " +
+                                "e.g., timberlake_init.txt. Please adhere to the format described in 3.1 for your " +
+                                "topology files." +
+                                "\n" +
+                                "\n" +
+                                "routing-update-interval:" +
+                                "\n" +
+                                "\tIt specifies the time interval between routing updates in seconds." +
+                                "\n" +
+                                "\n" +
+                                "port and server-id:" +
+                                "\n" +
+                                "\tThey are written in the topology file. The server should find its port and " +
+                                "server-id in the topology file without changing the entry format or adding any new " +
+                                "entries." +
+                                "\n" +
+                                "\n" +
+                                "update <server-ID1> <server-ID2> <Link Cost> server-ID1, server-ID2:" +
+                                "\n" +
+                                "\tThe link for which the cost is being updated." +
+                                "\n" +
+                                "\n" +
+                                "Link Cost: It specifies the new link cost between the source and the destination " +
+                                "server. Note that this command will be issued to both server-ID1 and server-ID2 " +
+                                " and involve them to update the cost and no other server." +
+                                "\n" +
+                                "For example:" +
+                                "\n" +
+                                "\tupdate 1 2 inf: The link between the servers with IDs 1 and 2 is assigned to " +
+                                "infinity." +
+                                "\n" +
+                                "\tupdate 1 2 8: Change the cost of the link to 8." +
+                                "\n" +
+                                "\n" +
+                                "step:" +
+                                "\n" +
+                                "\tSend routing update to neighbors right away. Note that except this, routing " +
+                                "updates only happen periodically." +
+                                "\n" +
+                                "\n" +
+                                "packets:" +
+                                "\n" +
+                                "\tDisplay the number of distance vector (packets) this server has received since " +
+                                "the last invocation of this information." +
+                                "\n" +
+                                "\n" +
+                                "display:" +
+                                "\n" +
+                                "\tDisplay the current routing table. And the table should be displayed in a sorted " +
+                                "order from small ID to big. The display should be formatted as a sequence of lines, " +
+                                "with each line indicating: <source-server-ID> <next-hop-ID> <cost-of-path>" +
+                                "\n" +
+                                "\n" +
+                                "disable <server-ID>:" +
+                                "\n" +
+                                "\tDisable the link to a given server. Doing this \"closes\" the connection to a " +
+                                "given server with server-ID. Here you need to check if the given server is its " +
+                                "neighbor." +
+                                "\n" +
+                                "\n" +
+                                "crash:" +
+                                "\n" +
+                                "\t\"Close\" all connections. This is to simulate server crashes. Close all " +
+                                "connections on all links. The neighboring servers must handle this close correctly " +
+                                "and set the link cost to infinity."
+                                );
+                            break;
+                        }
+                    case "exit":
+                        {
+                            Console.WriteLine("All connections closing, good bye...");
+                            /* end listeners
+                            foreach ((int id, string address, int port) in peerManager.GetPeerList())
+                            {
+                                peerManager.TerminatePeer(id);
+                            }
+                            /**/
+                            Console.WriteLine("Terminating connections");
+                            return;
+                        }
+                    default:
+                        {
+                            Console.WriteLine("Error: Invalid Command, type [help] for a list of commands...");
+                            break;
+                        }
+                }
+                Console.WriteLine();
+            }
         }
 
         public void Send(RouterState destination, string msg)

@@ -12,13 +12,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Update="Topology1.txt">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
     <None Update="Topology2.txt">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Topology3.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
     <None Update="Topology4.txt">

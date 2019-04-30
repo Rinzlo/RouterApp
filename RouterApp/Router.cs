@@ -232,19 +232,68 @@ namespace RouterApp
                         }
                     case "packets":
                         {
-                            Console.WriteLine($"Total packets received: {packets}"); 
+                            Console.WriteLine($"Total packets received: {packets}");
                             break;
                         }
-                    case var val when new Regex(@"^update\s(\d{1,3})\s(\d{1,3})\s(\d{1,3})$").IsMatch(val):
+                    case var val when new Regex(@"^update\s(\d{1,3})\s(\d{1,3})\s(\∞|\d)$").IsMatch(val):
 
                         {
-                            Console.WriteLine("The update thing worked");
+                            var m = new Regex(@"^update\s(\d{1,3})\s(\d{1,3})\s(\∞|\d{1,3})$").Match(line);
+                            int servEdge = Int32.Parse(m.Groups[1].Captures[0].Value);
+                            int endEdge = Int32.Parse(m.Groups[2].Captures[0].Value);
+                            int linkCost;
+                            String tmpLinkCost = m.Groups[3].Captures[0].Value;
+                            if (tmpLinkCost.Equals("∞"))
+                            {
+                                linkCost = int.MaxValue;
+                            } else
+                            {
+                                linkCost = int.Parse(tmpLinkCost);
+                            }
+
+                            Console.WriteLine($"values pulled {servEdge} {endEdge}");
+                            Console.WriteLine($"link cost is {linkCost}");
+
+                            UpdateEdge(servEdge, endEdge, linkCost);
                             break;
                         }
+                
 
                     case "crash":
                         {
 
+                            Console.WriteLine("CRASH occured: links set to infinity");
+                            crash();
+                            break;
+                        }
+                    case "display":
+                        {
+
+                           Display();
+                            break;
+                        }
+
+                    case var val when new Regex(@"^disable\s(\d{1,3})$").IsMatch(val):
+                        {
+                            var m = new Regex(@"^disable\s(\d{1,3})$").Match(line);
+                            int disabledServer = Int32.Parse(m.Groups[1].Captures[0].Value);
+
+                            if (disabledServer < 1 || disabledServer > ServerCount)
+                            {
+                                Console.WriteLine("the serer you inputed does not exist");
+                            }
+                            else if (table[serverId - 1, disabledServer - 1] == int.MaxValue)
+                                {
+                                    Console.WriteLine("You are not a neigbor with this server");
+                                }
+                                else
+                                {
+
+                                    table[serverId - 1, disabledServer - 1] = 0;
+                                }
+                            
+
+                            Display();
                             break;
                         }
                     case "exit":
@@ -400,10 +449,41 @@ namespace RouterApp
         }
 
         // update 1 2 7   where 1 is serverID, 2 is edgeID, and 7 is link cost 
-        public void UpdateEdge(int servID, int edgeId, int linkCost)
+        public void UpdateEdge(int inputId, int edgeId, int linkCost)
         {
-            table[servID--, edgeId--] = linkCost;
 
+
+            if ((inputId < 1 || inputId > ServerCount) || (edgeId < 1 || edgeId > ServerCount))
+            {
+                Console.WriteLine("Inputed server or edge does not exist!");
+            }
+            else
+            {
+
+               
+
+                if (inputId == serverId)
+                {
+                    table[inputId - 1, edgeId - 1] = linkCost;
+                    table[edgeId - 1, inputId - 1] = linkCost;
+
+                    Console.WriteLine($"Edge {inputId} {edgeId} was set to {linkCost}");
+                    DisplayTable();
+                }
+                else
+                {
+                    Console.WriteLine("You tried to update a value that is not involved");
+                }
+            }
+        }
+
+        public void crash()
+        {
+            for(int i = 0; i < table.GetLength(0); i++)
+            {
+                table[serverId - 1, i] = int.MaxValue;
+
+            }
         }
 
         public void BellmanFord()

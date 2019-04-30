@@ -42,6 +42,9 @@ namespace RouterApp
 
         int numEdges;
         int serverId;
+        int packets = 0;       // counter for packets received  
+
+        String[] receivedRow;
 
 
         public Router(int id = 1)
@@ -52,7 +55,7 @@ namespace RouterApp
             Console.WriteLine(Info);
 
             BellmanFord();
-            
+            Display();
 
             //TODO: start listener with file read port
             Run();
@@ -69,6 +72,14 @@ namespace RouterApp
             {
                 byte[] bytes = listener.EndReceive(res, ref endPoint);
                 string receiveString = Encoding.ASCII.GetString(bytes);
+                packets++;
+                receivedRow = receiveString.Split(' ');
+
+                Console.WriteLine(string.Join(",", receivedRow));
+
+
+                UpdateRow(int.Parse(receivedRow[0]), receivedRow);
+                DisplayTable();
 
                 Console.WriteLine($"Received: {receiveString}");
 
@@ -114,16 +125,17 @@ namespace RouterApp
                     case "DVTEST":
                         {
                             DVA d1 = new DVA();
-                            int[] updateRow2 = { 7, 0, 2, int.MaxValue };
-                            int[] updateRow3 = { 4, 2, 0, 1 };
-                            int[] updateRow4 = { 3, int.MaxValue, 0, 0 };
-
+                            int[] updateRow2 = { int.MaxValue, 0, 2, int.MaxValue };
+                            int[] updateRow3 = { int.MaxValue, 2, 0, 1 };
+                            int[] updateRow4 = { 5, int.MaxValue, 1, 0 };
                             d1.ReadTopFile();
                             d1.UpdateRow(2, updateRow2);
                             d1.UpdateRow(3, updateRow3);
                             d1.UpdateRow(4, updateRow4);
                             d1.DVectorAlg();
                             d1.Display();
+                            d1.DisplayRouteArray();
+
                             break;
                         }
 
@@ -218,6 +230,23 @@ namespace RouterApp
                             }
                             break;
                         }
+                    case "packets":
+                        {
+                            Console.WriteLine($"Total packets received: {packets}"); 
+                            break;
+                        }
+                    case var val when new Regex(@"^update\s(\d{1,3})\s(\d{1,3})\s(\d{1,3})$").IsMatch(val):
+
+                        {
+                            Console.WriteLine("The update thing worked");
+                            break;
+                        }
+
+                    case "crash":
+                        {
+
+                            break;
+                        }
                     case "exit":
                         {
                             Console.WriteLine("All connections closing, good bye...");
@@ -263,35 +292,43 @@ namespace RouterApp
         // reads the Topology file, and sets up everything
         public void ReadTopFile(int id)
         {
-            StreamReader sr = new StreamReader($"Topology{id}.txt");
-            int numServers = int.Parse(sr.ReadLine());
-            numEdges = int.Parse(sr.ReadLine());
 
-            // initialize the the array that holds ip and port info for each server
-            servers = new RouterState[numServers];
-            // read the ip address and ports of servers in top file
-            for (int i = 0; i < servers.Length; i++)
+            try
             {
-                string[] servRow;
-                servRow = sr.ReadLine().Split(' ');
-                // don't need server id since servers are in order of id.
-                // servers[i].id = int.Parse(servRow[0]);
-                IPEndPoint ep = new IPEndPoint(IPAddress.Parse(servRow[1]), int.Parse(servRow[2]));
-                servers[i] = new RouterState(ep);
-            }
+                StreamReader sr = new StreamReader($"Topology{id}.txt");
+                int numServers = int.Parse(sr.ReadLine());
+                numEdges = int.Parse(sr.ReadLine());
 
-            // setup routing table and prep for Distance vector algorithm 
-            Setup(numServers);
-            for (int j = 0; j < numEdges; j++)
+                // initialize the the array that holds ip and port info for each server
+                servers = new RouterState[numServers];
+                // read the ip address and ports of servers in top file
+                for (int i = 0; i < servers.Length; i++)
+                {
+                    string[] servRow;
+                    servRow = sr.ReadLine().Split(' ');
+                    // don't need server id since servers are in order of id.
+                    // servers[i].id = int.Parse(servRow[0]);
+                    IPEndPoint ep = new IPEndPoint(IPAddress.Parse(servRow[1]), int.Parse(servRow[2]));
+                    servers[i] = new RouterState(ep);
+                }
+
+                // setup routing table and prep for Distance vector algorithm 
+                Setup(numServers);
+                for (int j = 0; j < numEdges; j++)
+                {
+                    string[] row = sr.ReadLine().Split(' ');
+                    serverId = int.Parse(row[0]);
+                    int neighbor = int.Parse(row[1]);
+                    int weight = int.Parse(row[2]);
+                    table[serverId - 1, neighbor - 1] = weight;
+                }
+                table[serverId - 1, serverId - 1] = 0; // self connections are set to zero
+               } 
+            catch(Exception e)
             {
-                string[] row = sr.ReadLine().Split(' ');
-                serverId = int.Parse(row[0]);
-                int neighbor = int.Parse(row[1]);
-                int weight = int.Parse(row[2]);
-                table[serverId - 1, neighbor - 1] = weight;
+                Console.WriteLine($"Topology file for server {id} does not exist");
             }
-            table[serverId - 1, serverId - 1] = 0; // self connections are set to zero
-        }
+            }
 
         public void DisplayTopFile()
         {
@@ -340,28 +377,61 @@ namespace RouterApp
             }
         }
 
+
+        public void Display()
+        {
+            for (int i = 0; i < dist.GetLength(0); i++)
+            {
+                Console.WriteLine("Source-Server: " + (i + 1) + " Next-Hop: " + (parents[i] + 1) + " Cost of Path: " + dist[i]);
+            }
+        }
+
+
+        public void UpdateRow(int rowNum, String[] newRowArr)
+        {
+            rowNum--;
+
+                // start at 1 for newRowArr because newRowArr[0] is the row id 
+                for (int i = 0; i < table.GetLength(0); i++)
+                {
+                    table[rowNum, i] = int.Parse(newRowArr[i + 1]);
+                }
+            
+        }
+
+        // update 1 2 7   where 1 is serverID, 2 is edgeID, and 7 is link cost 
+        public void UpdateEdge(int servID, int edgeId, int linkCost)
+        {
+            table[servID--, edgeId--] = linkCost;
+
+        }
+
         public void BellmanFord()
         {
             Console.WriteLine("\nDistance Vector: ");
-            for (int i = 0; i < table.GetLength(0); i++)
+
+            for (int k = 0; k < table.GetLength(0); k++)
             {
-                for (int j = 0; j < table.GetLength(1); j++)
+                for (int i = 0; i < table.GetLength(0); i++)
                 {
-                    if ((dist[i] + table[i, j] < dist[j]) && (table[i, j] != int.MaxValue && dist[i] != int.MaxValue))
+                    for (int j = 0; j < table.GetLength(1); j++)
                     {
-
-                        dist[j] = dist[i] + table[i, j];
-                        parents[j] = i;
-                        int test = dist[i] + table[i, j];
-                        Console.WriteLine($"dist[{i}] is {dist[i]} table[{i},{j}] is {table[i, j]}");
-                        Console.WriteLine($"new edge value is {test} at {i}, {j}");
-
-                        // check if our servers row changed (serverid - 1) set a boolean to indicate this and later send this to all other servers
-                        // after we send this to the other servers we will need to set the boolean back to false
-
-                        if ((i + 1) == serverId)
+                        if ((dist[i] + table[i, j] < dist[j]) && (table[i, j] != int.MaxValue && dist[i] != int.MaxValue))
                         {
-                            Console.WriteLine("Table updated send this to all peers");
+
+                            dist[j] = dist[i] + table[i, j];
+                            parents[j] = i;
+                            int test = dist[i] + table[i, j];
+                            Console.WriteLine($"dist[{i}] is {dist[i]} table[{i},{j}] is {table[i, j]}");
+                            Console.WriteLine($"new edge value is {test} at {i}, {j}");
+
+                            // check if our servers row changed (serverid - 1) set a boolean to indicate this and later send this to all other servers
+                            // after we send this to the other servers we will need to set the boolean back to false
+
+                            if ((i + 1) == serverId)
+                            {
+                                Console.WriteLine("Table updated send this to all peers");
+                            }
                         }
                     }
                 }

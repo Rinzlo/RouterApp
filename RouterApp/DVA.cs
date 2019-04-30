@@ -176,7 +176,7 @@ namespace RouterApp
         // reads the Topology file, and sets up everything
         public void ReadTopFile()
         {
-            StreamReader sr = new StreamReader("Topology.txt");
+            StreamReader sr = new StreamReader("Topology1.txt");
             numServers = int.Parse(sr.ReadLine());
             numEdges = int.Parse(sr.ReadLine());
 
@@ -205,31 +205,33 @@ namespace RouterApp
 
         public void DVectorAlg()
         {
-            for (int i = 0; i < routeArray.GetLength(0); i++)
+            for (int k = 0; k < routeArray.GetLength(0); k++)
             {
-                for (int j = 0; j < routeArray.GetLength(1); j++)
+                for (int i = 0; i < routeArray.GetLength(0); i++)
                 {
-                    if ((dist[i] + routeArray[i, j] < dist[j]) && (routeArray[i, j] != int.MaxValue && dist[i] != int.MaxValue))
+                    for (int j = 0; j < routeArray.GetLength(1); j++)
                     {
-
-                        dist[j] = dist[i] + routeArray[i, j];
-                        parent[j] = i;
-                        int test = dist[i] + routeArray[i, j];
-                        Console.WriteLine("dist[i] is " + dist[i] + " route[i,j] is " + routeArray[i, j]);
-                        Console.WriteLine("new edge value is " + test + " at " + i + ", " + j);
-
-                        // check if our servers row changed (serverid - 1) set a boolean to indicate this and later send this to all other servers
-                        // after we send this to the other servers we will need to set the boolean back to false
-
-                        if ((i + 1) == serverId)
+                        if ((dist[i] + routeArray[i, j] < dist[j]) && (routeArray[i, j] != int.MaxValue && dist[i] != int.MaxValue))
                         {
-                            isUpdated = true;
-                            Console.WriteLine("Table updated send this to all peers");
+
+                            dist[j] = dist[i] + routeArray[i, j];
+                            parent[j] = i;
+                            int test = dist[i] + routeArray[i, j];
+                            Console.WriteLine("dist[i] is " + dist[i] + " route[i,j] is " + routeArray[i, j]);
+                            Console.WriteLine("new edge value is " + test + " at " + i + ", " + j);
+
+                            // check if our servers row changed (serverid - 1) set a boolean to indicate this and later send this to all other servers
+                            // after we send this to the other servers we will need to set the boolean back to false
+
+                            if ((i + 1) == serverId)
+                            {
+                                isUpdated = true;
+                                Console.WriteLine("Table updated send this to all peers");
+                            }
                         }
                     }
                 }
             }
-
 
             // The following handles negative weight cycles
             // I dont think we need it but I have included it here

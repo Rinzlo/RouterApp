@@ -44,9 +44,9 @@ namespace RouterApp
         int serverId;
 
 
-        public Router(int id = 1)
+        public Router(string file, int interval)
         {
-            ReadTopFile(id);
+            ReadTopFile(file);
             DisplayTopFile();
             DisplayTable();
             Console.WriteLine(Info);
@@ -111,44 +111,9 @@ namespace RouterApp
 
                 switch (line)
                 {
-                    case "DVTEST":
-                        {
-                            DVA d1 = new DVA();
-                            int[] updateRow2 = { 7, 0, 2, int.MaxValue };
-                            int[] updateRow3 = { 4, 2, 0, 1 };
-                            int[] updateRow4 = { 3, int.MaxValue, 0, 0 };
-
-                            d1.ReadTopFile();
-                            d1.UpdateRow(2, updateRow2);
-                            d1.UpdateRow(3, updateRow3);
-                            d1.UpdateRow(4, updateRow4);
-                            d1.DVectorAlg();
-                            d1.Display();
-                            break;
-                        }
-
                     case "help":
                         {
                             Console.WriteLine("Commands:\n" +
-                                "\n" +
-                                "server -t <topology-file-name> -i <routing-update-interval> topology-file-name:" +
-                                "\n" +
-                                "\tThe topology file contains the initial topology configuration for the server, " +
-                                "e.g., timberlake_init.txt. Please adhere to the format described in 3.1 for your " +
-                                "topology files." +
-                                "\n" +
-                                "\n" +
-                                "routing-update-interval:" +
-                                "\n" +
-                                "\tIt specifies the time interval between routing updates in seconds." +
-                                "\n" +
-                                "\n" +
-                                "port and server-id:" +
-                                "\n" +
-                                "\tThey are written in the topology file. The server should find its port and " +
-                                "server-id in the topology file without changing the entry format or adding any new " +
-                                "entries." +
-                                "\n" +
                                 "\n" +
                                 "update <server-ID1> <server-ID2> <Link Cost> server-ID1, server-ID2:" +
                                 "\n" +
@@ -261,9 +226,9 @@ namespace RouterApp
 
         // TODO: refactor file string reading code.
         // reads the Topology file, and sets up everything
-        public void ReadTopFile(int id)
+        public void ReadTopFile(string file)
         {
-            StreamReader sr = new StreamReader($"Topology{id}.txt");
+            StreamReader sr = new StreamReader(file);
             int numServers = int.Parse(sr.ReadLine());
             numEdges = int.Parse(sr.ReadLine());
 

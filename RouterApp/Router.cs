@@ -5,6 +5,8 @@ using System.Net.Sockets;
 using System.Text;
 using System.IO;
 using System.Text.RegularExpressions;
+using System.Timers;
+using System.Linq;
 
 namespace RouterApp
 {
@@ -28,7 +30,11 @@ namespace RouterApp
                     $"\nIP: {servers[serverId-1].Ip}" +
                     $"\nPORT: {servers[serverId - 1].Port}"; } }
 
-        private UdpClient listener;
+        private UdpClient msgListener;
+
+        private int toInterval;
+        private int[] missedIntervals;
+        private int MAX_MISSED_INTERVALS = 3;
 
         public int ServerCount { get { return servers.Length; } }
 
@@ -44,12 +50,11 @@ namespace RouterApp
         int serverId;
         int packets = 0;       // counter for packets received  
 
-        String[] receivedRow;
 
-
-        public Router(int id = 1)
+        public Router(string file, int interval)
         {
-            ReadTopFile(id);
+            toInterval = interval;
+            ReadTopFile(file);
             DisplayTopFile();
             DisplayTable();
             Console.WriteLine(Info);
@@ -57,7 +62,7 @@ namespace RouterApp
             BellmanFord();
             Display();
 
-            //TODO: start listener with file read port
+            //TODO: start msgListener with file read port
             Run();
         }
 
@@ -65,25 +70,33 @@ namespace RouterApp
         public void OnReceive(IAsyncResult res)
         {
             (int id, UdpClient client) = ((int, UdpClient))res.AsyncState;
-            listener = client;
+            msgListener = client;
             IPEndPoint endPoint = servers[id].EndPoint;
+
+            //TODO: check if this is a timeout update.
+            // if so, check if it is a new connection.
 
             try
             {
-                byte[] bytes = listener.EndReceive(res, ref endPoint);
+                byte[] bytes = msgListener.EndReceive(res, ref endPoint);
                 string receiveString = Encoding.ASCII.GetString(bytes);
                 packets++;
-                receivedRow = receiveString.Split(' ');
+                // row: [id, col0, col1, ..., coln]
+                
+                string[] receivedRow  = receiveString.Split(' ');;
+                // cut off the first element of the array
+
+                Array.Copy(receivedRow, 1, receivedRow, 0, receiveString.Length-1);
 
                 Console.WriteLine(string.Join(",", receivedRow));
 
 
-                UpdateRow(int.Parse(receivedRow[0]), receivedRow);
+                //UpdateRow(int.Parse(receiveString[0]), receivedRow);
                 DisplayTable();
 
                 Console.WriteLine($"Received: {receiveString}");
 
-                listener.BeginReceive(new AsyncCallback(OnReceive), res.AsyncState);
+                msgListener.BeginReceive(new AsyncCallback(OnReceive), res.AsyncState);
             } catch (Exception e)
             {
                 Console.WriteLine(e.StackTrace);
@@ -101,17 +114,51 @@ namespace RouterApp
 
             Console.WriteLine("Message sent to the broadcast address");
         }
+
+        public void SetupMessageListener()
+        {
+            // initializes msgListeners.
+            RouterState myServer = servers[serverId - 1];
+            msgListener = new UdpClient(myServer.Port);
+
+            Console.WriteLine($"listening for messages on port[{myServer.Port}] and ip[{myServer.Ip}]");
+            msgListener.BeginReceive(new AsyncCallback(OnReceive), (serverId, msgListener));
+        }
         #endregion
+
+        
+
+        private async void OnTimedEvent(Object source, ElapsedEventArgs e)
+        {
+            for(int i = 0; i > table.GetLength(1); i++)
+            {
+                if(serverId-1 != i && 
+                    table[serverId,i] != int.MaxValue)
+                {
+                    
+                    if(missedIntervals[i] >= MAX_MISSED_INTERVALS)
+                    {
+                        //Disconnect from server i.
+                        UpdateEdge(serverId, i+1, int.MaxValue);
+                    }else
+                    {
+                        missedIntervals[i]++;
+                    }
+                }
+            }
+            Console.WriteLine("Timer...");
+        }
 
         private void Run()
         {
-            // initializes listeners.
-            RouterState myServer = servers[serverId - 1];
-            listener = new UdpClient(myServer.Port);
+            SetupMessageListener();
 
-            Console.WriteLine($"listening for messages on port[{myServer.Port}] and ip[{myServer.Ip}]");
-            listener.BeginReceive(new AsyncCallback(OnReceive), (serverId, listener));
-
+            /**/
+            Timer timer = new Timer(toInterval * 1000);
+            timer.AutoReset = true;
+            timer.Elapsed += new ElapsedEventHandler(OnTimedEvent);
+            timer.Start();
+            /**/
             string line = "";
 
             Console.WriteLine("Type [help] for a list of commands...\n");
@@ -122,45 +169,9 @@ namespace RouterApp
 
                 switch (line)
                 {
-                    case "DVTEST":
-                        {
-                            DVA d1 = new DVA();
-                            int[] updateRow2 = { int.MaxValue, 0, 2, int.MaxValue };
-                            int[] updateRow3 = { int.MaxValue, 2, 0, 1 };
-                            int[] updateRow4 = { 5, int.MaxValue, 1, 0 };
-                            d1.ReadTopFile();
-                            d1.UpdateRow(2, updateRow2);
-                            d1.UpdateRow(3, updateRow3);
-                            d1.UpdateRow(4, updateRow4);
-                            d1.DVectorAlg();
-                            d1.Display();
-                            d1.DisplayRouteArray();
-
-                            break;
-                        }
-
                     case "help":
                         {
                             Console.WriteLine("Commands:\n" +
-                                "\n" +
-                                "server -t <topology-file-name> -i <routing-update-interval> topology-file-name:" +
-                                "\n" +
-                                "\tThe topology file contains the initial topology configuration for the server, " +
-                                "e.g., timberlake_init.txt. Please adhere to the format described in 3.1 for your " +
-                                "topology files." +
-                                "\n" +
-                                "\n" +
-                                "routing-update-interval:" +
-                                "\n" +
-                                "\tIt specifies the time interval between routing updates in seconds." +
-                                "\n" +
-                                "\n" +
-                                "port and server-id:" +
-                                "\n" +
-                                "\tThey are written in the topology file. The server should find its port and " +
-                                "server-id in the topology file without changing the entry format or adding any new " +
-                                "entries." +
-                                "\n" +
                                 "\n" +
                                 "update <server-ID1> <server-ID2> <Link Cost> server-ID1, server-ID2:" +
                                 "\n" +
@@ -219,15 +230,20 @@ namespace RouterApp
                             int id = Int32.Parse(m.Groups[1].Captures[0].Value);
                             string msg = m.Groups[2].Captures[0].Value;
 
-                            if (msg.Length > 100)
-                            {
-                                Console.WriteLine("Error: message must be 100 characters or less");
-                            }
-                            else
-                            {
-                                Send(servers[id - 1], msg);
-                                Console.WriteLine("Message sent to peer with id " + id.ToString());
-                            }
+                            Send(servers[id - 1], msg);
+                            Console.WriteLine("Message sent to peer with id " + id.ToString());
+
+                            break;
+                        }
+                    case var val when new Regex(@"^update\s+(\d{1})\s+(\d+)\s+(\d+)$").IsMatch(val):
+                        {
+                            var m = new Regex(@"^update\s+(\d{1})\s+(\d+)\s+(\d+)$").Match(line);
+                            int id1 = Int32.Parse(m.Groups[1].Captures[0].Value);
+                            int id2 = Int32.Parse(m.Groups[2].Captures[0].Value);
+                            //TODO: allow for inf.
+                            int cost = Int32.Parse(m.Groups[3].Captures[0].Value);
+
+                            UpdateEdge(id1, id2, cost);
                             break;
                         }
                     case "packets":
@@ -299,9 +315,12 @@ namespace RouterApp
                     case "exit":
                         {
                             Console.WriteLine("All connections closing, good bye...");
-                            /* end listener */
+                            /* end msgListener */
                             /**/
                             Console.WriteLine("Terminating connections");
+                            
+                            msgListener.Close();
+                            timer.Stop();
                             return;
                         }
                     default:
@@ -312,7 +331,8 @@ namespace RouterApp
                 }
                 Console.WriteLine();
             }
-            listener.Close();
+            msgListener.Close();
+            timer.Stop();
         }
 
         #region fileIO
@@ -321,6 +341,7 @@ namespace RouterApp
             table = new int[servCount, servCount];
             dist = new int[servCount];
             parents = new int[servCount];
+            missedIntervals = new int[servCount];
 
             for (int i = 0; i < table.GetLength(0); i++)
             {
@@ -339,12 +360,11 @@ namespace RouterApp
 
         // TODO: refactor file string reading code.
         // reads the Topology file, and sets up everything
-        public void ReadTopFile(int id)
+        public void ReadTopFile(string file)
         {
-
             try
             {
-                StreamReader sr = new StreamReader($"Topology{id}.txt");
+                StreamReader sr = new StreamReader(file);
                 int numServers = int.Parse(sr.ReadLine());
                 numEdges = int.Parse(sr.ReadLine());
 
@@ -372,12 +392,12 @@ namespace RouterApp
                     table[serverId - 1, neighbor - 1] = weight;
                 }
                 table[serverId - 1, serverId - 1] = 0; // self connections are set to zero
-               } 
+            } 
             catch(Exception e)
             {
-                Console.WriteLine($"Topology file for server {id} does not exist");
+                Console.WriteLine($"Topology file '{file}' does not exist\nStack Trace: {e}");
             }
-            }
+        }
 
         public void DisplayTopFile()
         {
@@ -440,20 +460,18 @@ namespace RouterApp
         {
             rowNum--;
 
-                // start at 1 for newRowArr because newRowArr[0] is the row id 
-                for (int i = 0; i < table.GetLength(0); i++)
-                {
-                    table[rowNum, i] = int.Parse(newRowArr[i + 1]);
-                }
+            // start at 1 for newRowArr because newRowArr[0] is the row id 
+            for (int j = 0; j < table.GetLength(1); j++)
+            {
+                table[rowNum, j] = int.Parse(newRowArr[j + 1]);
+            }
             
         }
 
-        // update 1 2 7   where 1 is serverID, 2 is edgeID, and 7 is link cost 
-        public void UpdateEdge(int inputId, int edgeId, int linkCost)
+        // update 1 2 7   where 1 is serverID, 2 is destId, and 7 is link cost 
+        public void UpdateEdge(int sourceId, int destId, int linkCost)
         {
-
-
-            if ((inputId < 1 || inputId > ServerCount) || (edgeId < 1 || edgeId > ServerCount))
+            if ((sourceId < 1 || sourceId > ServerCount) || (destId < 1 || destId > ServerCount))
             {
                 Console.WriteLine("Inputed server or edge does not exist!");
             }
@@ -462,12 +480,12 @@ namespace RouterApp
 
                
 
-                if (inputId == serverId)
+                if (sourceId == serverId)
                 {
-                    table[inputId - 1, edgeId - 1] = linkCost;
-                    table[edgeId - 1, inputId - 1] = linkCost;
+                    table[sourceId - 1, destId - 1] = linkCost;
+                    table[destId - 1, sourceId - 1] = linkCost;
 
-                    Console.WriteLine($"Edge {inputId} {edgeId} was set to {linkCost}");
+                    Console.WriteLine($"Edge {sourceId} {destId} was set to {linkCost}");
                     DisplayTable();
                 }
                 else
@@ -475,6 +493,8 @@ namespace RouterApp
                     Console.WriteLine("You tried to update a value that is not involved");
                 }
             }
+
+            BellmanFord();
         }
 
         public void crash()
@@ -488,6 +508,10 @@ namespace RouterApp
 
         public void BellmanFord()
         {
+            //TODO: cache our server's row
+            int[] rowBefore = new int[table.Length];
+            Buffer.BlockCopy(table, serverId, rowBefore, 0, 1);
+
             Console.WriteLine("\nDistance Vector: ");
 
             for (int k = 0; k < table.GetLength(0); k++)
@@ -536,6 +560,15 @@ namespace RouterApp
             Console.WriteLine("[{0}]", string.Join(", ", dist));
             //Console.Write("Parent ");
             //Console.WriteLine("[{0}]", string.Join(", ", parent));
+
+            int[] rowAfter = new int[table.Length];
+            Buffer.BlockCopy(table, serverId, rowAfter, 0, 1);
+            // If our new row is different from the cached row, broadcast an update.
+            if(Enumerable.SequenceEqual(rowAfter, rowBefore))
+            {
+                //TODO: broadcast our new row.
+                Console.WriteLine("sending Row Update");
+            }
         }
     }
 }

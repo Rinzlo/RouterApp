@@ -84,11 +84,51 @@ namespace RouterApp
                 // row: [id, col0, col1, ..., coln]
                 
                 string[] receivedRow  = receiveString.Split(' ');;
-                // cut off the first element of the array
+                // dont cut off the first element of the array
+               
 
-                Array.Copy(receivedRow, 1, receivedRow, 0, receiveString.Length-1);
+
+                //Array.Copy(receivedRow, 1, receivedRow, 0, receiveString.Length-1);
 
                 Console.WriteLine(string.Join(",", receivedRow));
+
+                // ill do this more elegantly later, for now lets just test this
+                // if we get a disable command do it on our table
+                if (receivedRow[0].Equals("disable"))
+                {
+                    int source = int.Parse(receivedRow[1]);
+                    int destination = int.Parse(receivedRow[2]);
+                    Console.WriteLine($"Received command to disable server {source + 1} {destination + 1}");
+
+                    disableEdge(source, destination);
+
+                }
+                else if (receivedRow[0].Equals("UpdateRow")) // this is internal -- a change in our row will trigger the server to send this not the user
+                {
+
+
+                    String[] myArray = new String[100];
+
+                    //lock (receivedRow.SyncRoot)
+                    // {
+                    //    Array.Copy(receivedRow, myArray, receiveString.Length + 100);
+
+                    //}
+
+                    //    Array.Copy(receivedRow, 1, receivedRow, 0, receiveString.Length);
+
+                    Console.WriteLine("Update row receved this");
+                    Console.WriteLine(string.Join(",", receivedRow));
+
+
+                    UpdateRow(int.Parse(receivedRow[1]), receivedRow);
+
+                } else if (receivedRow[0].Equals("GlobalUpdate"))
+                {
+                    // perform the request row update 
+
+
+                }
 
 
                 //UpdateRow(int.Parse(receiveString[0]), receivedRow);
@@ -252,7 +292,7 @@ namespace RouterApp
                             break;
                         }
                     case var val when new Regex(@"^update\s(\d{1,3})\s(\d{1,3})\s(\∞|\d)$").IsMatch(val):
-
+                       
                         {
                             var m = new Regex(@"^update\s(\d{1,3})\s(\d{1,3})\s(\∞|\d{1,3})$").Match(line);
                             int servEdge = Int32.Parse(m.Groups[1].Captures[0].Value);
@@ -273,8 +313,13 @@ namespace RouterApp
                             UpdateEdge(servEdge, endEdge, linkCost);
                             break;
                         }
-                
 
+                    case "step":
+                        {
+                            String[] test2 = {"1","1","2","3","4"};
+                            step(test2);
+                            break;
+                        }
                     case "crash":
                         {
 
@@ -305,10 +350,27 @@ namespace RouterApp
                                 else
                                 {
 
-                                    table[serverId - 1, disabledServer - 1] = 0;
-                                }
-                            
+                                    table[serverId - 1, disabledServer - 1] = int.MaxValue;
+                                    table[disabledServer - 1, serverId - 1] = int.MaxValue;
 
+                                for (int i = 1; i <= ServerCount; i++)
+                                {
+
+                                    if (i == serverId)
+                                    {
+                                        // dont send a disable to yourself again
+                                    }
+                                    else
+                                    {
+                                        // send everyone else the command to disable the server
+                                        Send(servers[i - 1], $"disable {serverId} {disabledServer}");
+                                    }
+
+                                }
+
+                            }
+
+                            BellmanFord();
                             Display();
                             break;
                         }
@@ -322,6 +384,11 @@ namespace RouterApp
                             msgListener.Close();
                             timer.Stop();
                             return;
+                        }
+                    case "displaytable":
+                        {
+                            DisplayTable();
+                            break;
                         }
                     default:
                         {
@@ -463,7 +530,7 @@ namespace RouterApp
             // start at 1 for newRowArr because newRowArr[0] is the row id 
             for (int j = 0; j < table.GetLength(1); j++)
             {
-                table[rowNum, j] = int.Parse(newRowArr[j + 1]);
+                table[rowNum, j] = int.Parse(newRowArr[j + 2]);
             }
             
         }
@@ -485,6 +552,13 @@ namespace RouterApp
                     table[sourceId - 1, destId - 1] = linkCost;
                     table[destId - 1, sourceId - 1] = linkCost;
 
+                    // send command to all other servers to update this edge 
+                    for (int i = 1; i <= ServerCount; i++)
+                    {
+                        Send(servers[i - 1], $"globalUpdate {sourceId} {destId} {linkCost}");
+
+                    }
+
                     Console.WriteLine($"Edge {sourceId} {destId} was set to {linkCost}");
                     DisplayTable();
                 }
@@ -495,6 +569,49 @@ namespace RouterApp
             }
 
             BellmanFord();
+        }
+
+        public void GlobalUpdate(int sourceId, int destId, int linkCost)
+        {
+
+            table[sourceId - 1, destId - 1] = linkCost;
+            table[destId - 1, sourceId] = linkCost;
+
+            // We should do BellmanFord again
+            // not yet until I resolve the other issue
+
+        }
+
+        // when we receive a disable message from another server we run this to disable those same edges
+        // EX server1 calls disable 2
+        //    sends message to server2 which results in this call disableEdge(source, destination)
+        // important distinction this method allows us to change an edge of another server
+        public void disableEdge(int source, int destination)
+        {
+            table[source - 1, destination - 1] = int.MaxValue;
+            table[destination - 1, source - 1] = int.MaxValue;
+
+            // rerun bellman ford
+            BellmanFord();
+            // send if changed?
+
+        }
+
+        // send my routing update to everyone
+        // this should send our DV aka the dist[]
+        // giving an array as a parameter for testing.  I will change to dist once I make the other fixes
+        public void step(String[] stepArr)
+        {
+            
+            String stepMsg = "UpdateRow " + string.Join(" ", stepArr);
+            Console.WriteLine("Sending step " + stepMsg);
+            
+            for (int i = 1; i <= ServerCount; i++)
+            {
+                Send(servers[i - 1], stepMsg);
+            }
+            
+
         }
 
         public void crash()

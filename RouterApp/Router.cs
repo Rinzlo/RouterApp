@@ -25,10 +25,16 @@ namespace RouterApp
             public int Port { get { return endPoint.Port; } set { endPoint.Port = value; } }
         }
 
-        public string Info { get { return $"\nRouter Info:" +
-                    $"\nID: {serverId}" +
-                    $"\nIP: {servers[serverId-1].Ip}" +
-                    $"\nPORT: {servers[serverId - 1].Port}"; } }
+        public string Info
+        {
+            get
+            {
+                return $"\nRouter Info:" +
+ $"\nID: {serverId}" +
+ $"\nIP: {servers[serverId - 1].Ip}" +
+ $"\nPORT: {servers[serverId - 1].Port}";
+            }
+        }
 
         private UdpClient msgListener;
 
@@ -86,12 +92,12 @@ namespace RouterApp
 
                 // quick fix
                 // the ∞ in the receive string become "?" when its received
-                receiveString = receiveString.Replace("?",int.MaxValue.ToString());
+                receiveString = receiveString.Replace("?", int.MaxValue.ToString());
 
                 Console.WriteLine("Received string is " + receiveString);
-                string[] receivedRow  = receiveString.Split(' ');;
+                string[] receivedRow = receiveString.Split(' '); ;
                 // dont cut off the first element of the array
-               
+
 
 
                 //Array.Copy(receivedRow, 1, receivedRow, 0, receiveString.Length-1);
@@ -129,14 +135,16 @@ namespace RouterApp
 
                     UpdateRow(int.Parse(receivedRow[1]), receivedRow);
 
-                } else if (receivedRow[0].Equals("globalUpdate"))
+                }
+                else if (receivedRow[0].Equals("globalUpdate"))
                 {
                     // perform the request row update 
                     GlobalUpdate(int.Parse(receivedRow[1]), int.Parse(receivedRow[2]), int.Parse(receivedRow[3]));
                     // probably redo the bellman ford
                     BellmanFord();
 
-                } else if (receivedRow[0].Equals("crash"))
+                }
+                else if (receivedRow[0].Equals("crash"))
                 {
                     // if we receive crash command sever   EX we get "crash 1" then handle crashing 1
                     crash(int.Parse(receivedRow[1]));
@@ -149,7 +157,8 @@ namespace RouterApp
                 Console.WriteLine($"Received: {receiveString}");
 
                 msgListener.BeginReceive(new AsyncCallback(OnReceive), res.AsyncState);
-            } catch (Exception e)
+            }
+            catch (Exception e)
             {
                 Console.WriteLine(e.StackTrace);
             }
@@ -178,21 +187,22 @@ namespace RouterApp
         }
         #endregion
 
-        
+
 
         private async void OnTimedEvent(Object source, ElapsedEventArgs e)
         {
-            for(int i = 0; i > table.GetLength(1); i++)
+            for (int i = 0; i > table.GetLength(1); i++)
             {
-                if(serverId-1 != i && 
-                    table[serverId,i] != int.MaxValue)
+                if (serverId - 1 != i &&
+                    table[serverId, i] != int.MaxValue)
                 {
-                    
-                    if(missedIntervals[i] >= MAX_MISSED_INTERVALS)
+
+                    if (missedIntervals[i] >= MAX_MISSED_INTERVALS)
                     {
                         //Disconnect from server i.
-                        UpdateEdge(serverId, i+1, int.MaxValue);
-                    }else
+                        UpdateEdge(serverId, i + 1, int.MaxValue);
+                    }
+                    else
                     {
                         missedIntervals[i]++;
                     }
@@ -304,7 +314,7 @@ namespace RouterApp
                             break;
                         }
                     case var val when new Regex(@"^update\s(\d{1,3})\s(\d{1,3})\s(\∞|\d)$").IsMatch(val):
-                       
+
                         {
                             var m = new Regex(@"^update\s(\d{1,3})\s(\d{1,3})\s(\∞|\d{1,3})$").Match(line);
                             int servEdge = Int32.Parse(m.Groups[1].Captures[0].Value);
@@ -314,7 +324,8 @@ namespace RouterApp
                             if (tmpLinkCost.Equals("∞"))
                             {
                                 linkCost = int.MaxValue;
-                            } else
+                            }
+                            else
                             {
                                 linkCost = int.Parse(tmpLinkCost);
                             }
@@ -347,7 +358,7 @@ namespace RouterApp
                     case "display":
                         {
 
-                           Display();
+                            Display();
                             break;
                         }
 
@@ -361,14 +372,14 @@ namespace RouterApp
                                 Console.WriteLine("the serer you inputed does not exist");
                             }
                             else if (table[serverId - 1, disabledServer - 1] == int.MaxValue)
-                                {
-                                    Console.WriteLine("You are not a neigbor with this server");
-                                }
-                                else
-                                {
+                            {
+                                Console.WriteLine("You are not a neigbor with this server");
+                            }
+                            else
+                            {
 
-                                    table[serverId - 1, disabledServer - 1] = int.MaxValue;
-                                    table[disabledServer - 1, serverId - 1] = int.MaxValue;
+                                table[serverId - 1, disabledServer - 1] = int.MaxValue;
+                                table[disabledServer - 1, serverId - 1] = int.MaxValue;
                                 BellmanFord();
 
                                 for (int i = 1; i <= ServerCount; i++)
@@ -398,7 +409,7 @@ namespace RouterApp
                             /* end msgListener */
                             /**/
                             Console.WriteLine("Terminating connections");
-                            
+
                             msgListener.Close();
                             timer.Stop();
                             return;
@@ -439,7 +450,7 @@ namespace RouterApp
                     table[i, j] = int.MaxValue;
                 }
 
-            } 
+            }
             // need to move this for algorithm to work for each server 
             //dist[1] = 0;
         }
@@ -469,7 +480,7 @@ namespace RouterApp
 
                 // setup routing table and prep for Distance vector algorithm 
                 Setup(numServers);
-                
+
                 for (int j = 0; j < numEdges; j++)
                 {
                     string[] row = sr.ReadLine().Split(' ');
@@ -551,7 +562,7 @@ namespace RouterApp
             // start at 1 for newRowArr because newRowArr[0] is the row id 
             for (int j = 0; j < table.GetLength(1); j++)
             {
-                
+
                 table[rowNum, j] = int.Parse(newRowArr[j + 2]);
             }
             // run bellman ford here 
@@ -568,7 +579,7 @@ namespace RouterApp
             else
             {
 
-               
+
 
                 if (sourceId == serverId)
                 {
@@ -626,10 +637,10 @@ namespace RouterApp
         // giving an array as a parameter for testing.  I will change to dist once I make the other fixes
         public void step(String[] stepArr)
         {
-            
+
             String stepMsg = $"UpdateRow {serverId} " + string.Join(" ", stepArr);
             Console.WriteLine("Sending step " + stepMsg);
-            
+
             for (int i = 1; i <= ServerCount; i++)
             {
 
@@ -643,14 +654,14 @@ namespace RouterApp
                     Send(servers[i - 1], stepMsg);
                 }
             }
-            
+
 
         }
 
         //crashes all connections to it and its connections to eerything else
         public void crash(int crashId)
         {
-            for(int i = 0; i < table.GetLength(0); i++)
+            for (int i = 0; i < table.GetLength(0); i++)
             {
                 table[i, crashId - 1] = int.MaxValue;
                 table[crashId - 1, i] = int.MaxValue;
@@ -662,7 +673,7 @@ namespace RouterApp
         // tell all servers to handle this crash
         public void SendCrash()
         {
-            for (int i = 1; i <= ServerCount; i++ )
+            for (int i = 1; i <= ServerCount; i++)
             {
                 if (serverId == i)
                 {
@@ -677,7 +688,7 @@ namespace RouterApp
 
         public void ResetDist()
         {
-            for(int i = 0; i < dist.GetLength(0); i++)
+            for (int i = 0; i < dist.GetLength(0); i++)
             {
                 if (i == serverId - 1)
                 {
@@ -704,7 +715,7 @@ namespace RouterApp
             Console.WriteLine("here is the copy");
             Console.WriteLine(String.Join(",", prevDist));
 
-            
+
             // i think we need to reset the distance table in order for this to work
             ResetDist();
             Console.WriteLine("\nDistance Vector: ");

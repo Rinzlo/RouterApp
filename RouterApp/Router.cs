@@ -579,8 +579,6 @@ namespace RouterApp
             else
             {
 
-
-
                 if (sourceId == serverId)
                 {
                     table[sourceId - 1, destId - 1] = linkCost;
@@ -667,6 +665,7 @@ namespace RouterApp
                 table[crashId - 1, i] = int.MaxValue;
 
             }
+            Console.WriteLine("crash: SUCCESS");
             BellmanFord();
         }
 

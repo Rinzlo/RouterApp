@@ -566,7 +566,7 @@ namespace RouterApp
                 table[rowNum, j] = int.Parse(newRowArr[j + 2]);
             }
             // run bellman ford here 
-            // BellmanFord();
+            BellmanFord();
         }
 
         // update 1 2 7   where 1 is serverID, 2 is destId, and 7 is link cost 

@@ -126,27 +126,39 @@ namespace RouterApp
         }
         #endregion
 
-        
 
-        private async void OnTimedEvent(Object source, ElapsedEventArgs e)
+
+        private void OnTimedEvent(Object source, ElapsedEventArgs e)
         {
-            for(int i = 0; i > table.GetLength(1); i++)
+            for (int i = 0; i < table.GetLength(1); i++)
             {
-                if(serverId-1 != i && 
-                    table[serverId,i] != int.MaxValue)
+                //Console.WriteLine("in here");
+                if (serverId - 1 != i && table[serverId - 1, i] != int.MaxValue)
                 {
-                    
-                    if(missedIntervals[i] >= MAX_MISSED_INTERVALS)
+
+                    if (missedIntervals[i] >= MAX_MISSED_INTERVALS)
                     {
                         //Disconnect from server i.
-                        UpdateEdge(serverId, i+1, int.MaxValue);
-                    }else
+                        Console.WriteLine($"disconnecting router {i + 1}");
+                        UpdateEdge(serverId, i + 1, int.MaxValue);
+                    }
+                    else
                     {
+                        // Console.WriteLine($"Router-{i+1}: {missedIntervals[i]}");
                         missedIntervals[i]++;
                     }
                 }
+                else
+                {
+                    // either our router, or inf distance
+                    /*
+                    Console.WriteLine($"serverId: {serverId}\n" +
+                        $"i: {i+1}\n" +
+                        $"table[{serverId},{i+1}]: {table[serverId-1,i]}\n");
+                    /**/
+                }
             }
-            Console.WriteLine("Timer...");
+            //Console.WriteLine("Timer...");
         }
 
         private void Run()

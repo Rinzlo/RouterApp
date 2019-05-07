@@ -91,20 +91,12 @@ namespace RouterApp
                 packets++;
                 // row: [id, col0, col1, ..., coln]
 
-
                 // quick fix
                 // the ∞ in the receive string become "?" when its received
                 receiveString = receiveString.Replace("?", int.MaxValue.ToString());
 
-                //Console.WriteLine("Received string is \"" + receiveString + "\"");
-                string[] receivedRow = receiveString.Split(' '); ;
-                // dont cut off the first element of the array
+                string[] receivedRow = receiveString.Split(' ');
 
-
-
-                //Array.Copy(receivedRow, 1, receivedRow, 0, receiveString.Length-1);
-
-                // ill do this more elegantly later, for now lets just test this
                 // if we get a disable command do it on our table
                 switch(receivedRow[0])
                 {
@@ -138,6 +130,7 @@ namespace RouterApp
                         Crash(int.Parse(receivedRow[1]));
                         break;
                     case "checkin":
+                        if (missedIntervals[int.Parse(receivedRow[1]) - 1] == int.MaxValue);//update route
                         missedIntervals[int.Parse(receivedRow[1])-1] = 0;
                         break;
                 }
@@ -162,8 +155,6 @@ namespace RouterApp
             byte[] sendbuf = Encoding.ASCII.GetBytes(msg);
 
             s.SendTo(sendbuf, ep);
-
-            //Console.WriteLine("Message sent to the broadcast address");
         }
 
         public void SetupMessageListener()
@@ -540,12 +531,27 @@ namespace RouterApp
 
         public void UpdateRow(int rowId, String[] newRowArr)
         {
+            bool diff = false;
             for (int j = 0; j < table.GetLength(1); j++)
             {
-                table[rowId-1, j] = int.Parse(newRowArr[j]);
+                int num = int.Parse(newRowArr[j]);
+                if (table[rowId - 1, j] != num)
+                {
+                    diff = true;
+                    table[rowId - 1, j] = num;
+                }
             }
+            if(diff)
+                BellmanFord();
+        }
 
-            BellmanFord();
+        void BroadcastRow()
+        {
+            for (int i = 0; i < ServerCount; i++)
+            {
+                if (serverId != i + 1 && parents[i] + 1 == serverId)
+                    Send(servers[i], $"UpdateRow {serverId} {string.Join(" ", dist)}");
+            }
         }
 
         // update 1 2 7   where 1 is serverID, 2 is destId, and 7 is link cost 
@@ -656,23 +662,6 @@ namespace RouterApp
             }
         }
 
-        public void ResetDist()
-        {
-            for (int i = 0; i < dist.GetLength(0); i++)
-            {
-                if (i == serverId - 1)
-                {
-                    dist[i] = 0;
-                }
-                else
-                {
-                    dist[i] = int.MaxValue;
-                }
-
-            }
-
-        }
-
         public void BellmanFord()
         {
             //TODO: cache our server's row
@@ -694,7 +683,7 @@ namespace RouterApp
                     {
                         if ((dist[i] + table[i, j] < dist[j]) && (table[i, j] != int.MaxValue && dist[i] != int.MaxValue))
                         {
-
+                            //TODO: Shouldn't we be setting dist to inf if it is disconnected and let it match table?
                             dist[j] = dist[i] + table[i, j];
                             parents[j] = i;
                             int test = dist[i] + table[i, j];
@@ -739,9 +728,9 @@ namespace RouterApp
             if (!Enumerable.SequenceEqual(prevDist, dist))
             {
                 Console.WriteLine("The dist was changed send the update to neighbors");
-                for(int i = 0; i < ServerCount; i++)
-                    if(serverId != i + 1 && parents[i] + 1 == serverId)
-                        Send(servers[i], $"UpdateRow {serverId} {string.Join(" ", dist)}");
+                for (int i = 0; i < table.GetLength(1); i++)
+                    table[serverId - 1, i] = dist[i];
+                BroadcastRow();
             }
             else
             {

@@ -106,48 +106,45 @@ namespace RouterApp
 
                 // ill do this more elegantly later, for now lets just test this
                 // if we get a disable command do it on our table
-                if (receivedRow[0].Equals("disable"))
+                switch(receivedRow[0])
                 {
-                    int source = int.Parse(receivedRow[1]);
-                    int destination = int.Parse(receivedRow[2]);
-                    Console.WriteLine($"Received command to disable server {source + 1} {destination + 1}");
+                    case "disable":
+                        int source = int.Parse(receivedRow[1]);
+                        int destination = int.Parse(receivedRow[2]);
+                        Console.WriteLine($"Received command to disable server {source + 1} {destination + 1}");
 
-                    disableEdge(source, destination);
+                        disableEdge(source, destination);
+                        break;
+                    case "UpdateRow":
+                        String[] myArray = new String[100];
 
-                }
-                else if (receivedRow[0].Equals("UpdateRow")) // this is internal -- a change in our row will trigger the server to send this not the user
-                {
+                        //lock (receivedRow.SyncRoot)
+                        // {
+                        //    Array.Copy(receivedRow, myArray, receiveString.Length + 100);
 
+                        //}
 
-                    String[] myArray = new String[100];
+                        //    Array.Copy(receivedRow, 1, receivedRow, 0, receiveString.Length);
 
-                    //lock (receivedRow.SyncRoot)
-                    // {
-                    //    Array.Copy(receivedRow, myArray, receiveString.Length + 100);
-
-                    //}
-
-                    //    Array.Copy(receivedRow, 1, receivedRow, 0, receiveString.Length);
-
-                    Console.WriteLine("Update row receved this");
-                    Console.WriteLine(string.Join(",", receivedRow));
+                        Console.WriteLine("Update row receved this");
+                        Console.WriteLine(string.Join(",", receivedRow));
 
 
-                    UpdateRow(int.Parse(receivedRow[1]), receivedRow);
-
-                }
-                else if (receivedRow[0].Equals("globalUpdate"))
-                {
-                    // perform the request row update 
-                    GlobalUpdate(int.Parse(receivedRow[1]), int.Parse(receivedRow[2]), int.Parse(receivedRow[3]));
-                    // probably redo the bellman ford
-                    BellmanFord();
-
-                }
-                else if (receivedRow[0].Equals("crash"))
-                {
-                    // if we receive crash command sever   EX we get "crash 1" then handle crashing 1
-                    crash(int.Parse(receivedRow[1]));
+                        UpdateRow(int.Parse(receivedRow[1]), receivedRow);
+                        break;
+                    case "globalUpdate":
+                        // perform the request row update 
+                        GlobalUpdate(int.Parse(receivedRow[1]), int.Parse(receivedRow[2]), int.Parse(receivedRow[3]));
+                        // probably redo the bellman ford
+                        BellmanFord();
+                        break;
+                    case "crash":
+                        // if we receive crash command sever   EX we get "crash 1" then handle crashing 1
+                        crash(int.Parse(receivedRow[1]));
+                        break;
+                    case "checkin":
+                        missedIntervals[int.Parse(receivedRow[1])-1] = 0;
+                        break;
                 }
 
 
@@ -195,7 +192,8 @@ namespace RouterApp
                 // Only check neihbors who are not inf dist (disconnected)
                 if (serverId - 1 != i && parents[i] == serverId - 1 && table[serverId - 1, i] != int.MaxValue)
                 {
-
+                    // send a checkin broadcast
+                    Send(servers[i], $"checkin {serverId}");
                     if (missedIntervals[i] >= MAX_MISSED_INTERVALS)
                     {
                         //Disconnect from server i.
@@ -605,10 +603,11 @@ namespace RouterApp
                     table[destId - 1, sourceId - 1] = linkCost;
 
                     // send command to all other servers to update this edge 
-                    for (int i = 1; i <= ServerCount; i++)
+                    for (int i = 0; i < ServerCount; i++)
                     {
-                        Send(servers[i - 1], $"globalUpdate {sourceId} {destId} {linkCost}");
-
+                        // Only update neighbors
+                        if(serverId != i+1 && parents[i] == serverId - 1)
+                            Send(servers[i], $"globalUpdate {sourceId} {destId} {linkCost}");
                     }
 
                     Console.WriteLine($"Edge {sourceId} {destId} was set to {linkCost}");

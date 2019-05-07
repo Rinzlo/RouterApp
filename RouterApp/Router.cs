@@ -30,9 +30,9 @@ namespace RouterApp
             get
             {
                 return $"\nRouter Info:" +
- $"\nID: {serverId}" +
- $"\nIP: {servers[serverId - 1].Ip}" +
- $"\nPORT: {servers[serverId - 1].Port}";
+                        $"\nID: {serverId}" +
+                        $"\nIP: {servers[serverId - 1].Ip}" +
+                        $"\nPORT: {servers[serverId - 1].Port}";
             }
         }
 
@@ -66,7 +66,7 @@ namespace RouterApp
             Console.WriteLine(Info);
 
             BellmanFord();
-            Display();
+            DisplayDist();
 
             //TODO: start msgListener with file read port
             Run();
@@ -187,28 +187,38 @@ namespace RouterApp
         }
         #endregion
 
-
-
-        private async void OnTimedEvent(Object source, ElapsedEventArgs e)
+        private void IntervalBroadcast(Object source, ElapsedEventArgs e)
         {
-            for (int i = 0; i > table.GetLength(1); i++)
+            for (int i = 0; i < table.GetLength(1); i++)
             {
-                if (serverId - 1 != i &&
-                    table[serverId, i] != int.MaxValue)
+                //Console.WriteLine($"parents[{i+1}]: {parents[i]+1}, serverId: {serverId}");
+                // Only check neihbors who are not inf dist (disconnected)
+                if (serverId - 1 != i && parents[i] == serverId - 1 && table[serverId - 1, i] != int.MaxValue)
                 {
 
                     if (missedIntervals[i] >= MAX_MISSED_INTERVALS)
                     {
                         //Disconnect from server i.
+                        Console.WriteLine($"disconnecting router {i + 1}");
                         UpdateEdge(serverId, i + 1, int.MaxValue);
                     }
                     else
                     {
+                        // Console.WriteLine($"Router-{i+1}: {missedIntervals[i]}");
                         missedIntervals[i]++;
                     }
                 }
+                else
+                {
+                    // either our router, or inf distance
+                    /*
+                    Console.WriteLine($"serverId: {serverId}\n" +
+                        $"i: {i+1}\n" +
+                        $"table[{serverId},{i+1}]: {table[serverId-1,i]}\n");
+                    /**/
+                }
             }
-            Console.WriteLine("Timer...");
+            //Console.WriteLine("Timer...");
         }
 
         private void Run()
@@ -218,7 +228,7 @@ namespace RouterApp
             /**/
             Timer timer = new Timer(toInterval * 1000);
             timer.AutoReset = true;
-            timer.Elapsed += new ElapsedEventHandler(OnTimedEvent);
+            timer.Elapsed += new ElapsedEventHandler(IntervalBroadcast);
             timer.Start();
             /**/
             string line = "";
@@ -358,7 +368,7 @@ namespace RouterApp
                     case "display":
                         {
 
-                            Display();
+                            DisplayDist();
                             break;
                         }
 
@@ -400,7 +410,7 @@ namespace RouterApp
                             }
 
                             BellmanFord();
-                            Display();
+                            DisplayDist();
                             break;
                         }
                     case "exit":
@@ -526,27 +536,37 @@ namespace RouterApp
 
         public void DisplayTable()
         {
-            Console.WriteLine("\nTable:");
+            Console.WriteLine();
+            //Console.WriteLine("{0,15} - {1, 17}", "Table:", "something");
+            Console.WriteLine($"{"Table:",15} - {"something",20}");
+            Console.WriteLine("__________________________________________________________");
+            Console.WriteLine("   |                                                      |");
             for (int i = 0; i < table.GetLength(0); i++)
             {
+                Console.Write($"{i+1}  |  ");
                 for (int j = 0; j < table.GetLength(1); j++)
                 {
                     //TODO: output grid format
                     if (table[i, j] < int.MaxValue)
                     {
-                        Console.Write(table[i, j] + "\t\t");
+                        if(j != 0)  Console.Write("\t\t");
+                        Console.Write(table[i, j]);
+                        if (j == table.GetLength(1)-1) Console.Write("\t");
                     }
                     else
                     {
-                        Console.Write("Infinity" + "\t");
+                        if(j != 0)  Console.Write("\t");
+                        Console.Write("Infinity");
                     }
                 }
-                Console.WriteLine("");
+                Console.WriteLine("  |");
             }
+
+            Console.WriteLine("___|______________________________________________________|");
         }
 
 
-        public void Display()
+        public void DisplayDist()
         {
             for (int i = 0; i < dist.GetLength(0); i++)
             {

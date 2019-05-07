@@ -46,8 +46,10 @@ namespace RouterApp
 
         RouterState[] servers;
 
+        /// holds table of indexes
         int[,] table;
 
+        /// holds parent indexes
         int[] parents;
 
         int[] dist;
@@ -94,7 +96,7 @@ namespace RouterApp
                 // the ∞ in the receive string become "?" when its received
                 receiveString = receiveString.Replace("?", int.MaxValue.ToString());
 
-                Console.WriteLine("Received string is " + receiveString);
+                //Console.WriteLine("Received string is \"" + receiveString + "\"");
                 string[] receivedRow = receiveString.Split(' '); ;
                 // dont cut off the first element of the array
 
@@ -102,45 +104,38 @@ namespace RouterApp
 
                 //Array.Copy(receivedRow, 1, receivedRow, 0, receiveString.Length-1);
 
-                Console.WriteLine(string.Join(",", receivedRow));
-
                 // ill do this more elegantly later, for now lets just test this
                 // if we get a disable command do it on our table
                 switch(receivedRow[0])
                 {
                     case "disable":
-                        int source = int.Parse(receivedRow[1]);
-                        int destination = int.Parse(receivedRow[2]);
-                        Console.WriteLine($"Received command to disable server {source + 1} {destination + 1}");
+                        int sourceId = int.Parse(receivedRow[1]);
+                        int destId = int.Parse(receivedRow[2]);
+                        Console.WriteLine($"Received command to disable server {sourceId + 1} {destId + 1}");
 
-                        disableEdge(source, destination);
+                        DisableEdge(sourceId, destId);
                         break;
                     case "UpdateRow":
+                        int rowId = int.Parse(receivedRow[1]);
                         String[] myArray = new String[100];
 
-                        //lock (receivedRow.SyncRoot)
-                        // {
-                        //    Array.Copy(receivedRow, myArray, receiveString.Length + 100);
+                        Console.WriteLine("Update row received this");
+                        Console.WriteLine(string.Join(" ", receivedRow));
+                        string[] tmp = new string[receivedRow.Length - 2];
+                        Array.Copy(receivedRow, 2, tmp, 0, receivedRow.Length - 2);
+                        Console.WriteLine($"\trow: {string.Join(" ", tmp)}");
 
-                        //}
-
-                        //    Array.Copy(receivedRow, 1, receivedRow, 0, receiveString.Length);
-
-                        Console.WriteLine("Update row receved this");
-                        Console.WriteLine(string.Join(",", receivedRow));
-
-
-                        UpdateRow(int.Parse(receivedRow[1]), receivedRow);
+                        UpdateRow(rowId, tmp);
                         break;
-                    case "globalUpdate":
+                    case "update":
                         // perform the request row update 
-                        GlobalUpdate(int.Parse(receivedRow[1]), int.Parse(receivedRow[2]), int.Parse(receivedRow[3]));
+                        UpdateEdge(int.Parse(receivedRow[1]), int.Parse(receivedRow[2]), int.Parse(receivedRow[3]));
                         // probably redo the bellman ford
                         BellmanFord();
                         break;
                     case "crash":
                         // if we receive crash command sever   EX we get "crash 1" then handle crashing 1
-                        crash(int.Parse(receivedRow[1]));
+                        Crash(int.Parse(receivedRow[1]));
                         break;
                     case "checkin":
                         missedIntervals[int.Parse(receivedRow[1])-1] = 0;
@@ -148,10 +143,8 @@ namespace RouterApp
                 }
 
 
-                //UpdateRow(int.Parse(receiveString[0]), receivedRow);
-                DisplayTable();
-
-                Console.WriteLine($"Received: {receiveString}");
+                //DisplayTable();
+                //Console.WriteLine($"Received: {receiveString}");
 
                 msgListener.BeginReceive(new AsyncCallback(OnReceive), res.AsyncState);
             }
@@ -170,7 +163,7 @@ namespace RouterApp
 
             s.SendTo(sendbuf, ep);
 
-            Console.WriteLine("Message sent to the broadcast address");
+            //Console.WriteLine("Message sent to the broadcast address");
         }
 
         public void SetupMessageListener()
@@ -188,7 +181,6 @@ namespace RouterApp
         {
             for (int i = 0; i < table.GetLength(1); i++)
             {
-                //Console.WriteLine($"parents[{i+1}]: {parents[i]+1}, serverId: {serverId}");
                 // Only check neihbors who are not inf dist (disconnected)
                 if (serverId - 1 != i && parents[i] == serverId - 1 && table[serverId - 1, i] != int.MaxValue)
                 {
@@ -202,21 +194,10 @@ namespace RouterApp
                     }
                     else
                     {
-                        // Console.WriteLine($"Router-{i+1}: {missedIntervals[i]}");
                         missedIntervals[i]++;
                     }
                 }
-                else
-                {
-                    // either our router, or inf distance
-                    /*
-                    Console.WriteLine($"serverId: {serverId}\n" +
-                        $"i: {i+1}\n" +
-                        $"table[{serverId},{i+1}]: {table[serverId-1,i]}\n");
-                    /**/
-                }
             }
-            //Console.WriteLine("Timer...");
         }
 
         private void Run()
@@ -305,24 +286,12 @@ namespace RouterApp
 
                             break;
                         }
-                    case var val when new Regex(@"^update\s+(\d{1})\s+(\d+)\s+(\d+)$").IsMatch(val):
-                        {
-                            var m = new Regex(@"^update\s+(\d{1})\s+(\d+)\s+(\d+)$").Match(line);
-                            int id1 = Int32.Parse(m.Groups[1].Captures[0].Value);
-                            int id2 = Int32.Parse(m.Groups[2].Captures[0].Value);
-                            //TODO: allow for inf.
-                            int cost = Int32.Parse(m.Groups[3].Captures[0].Value);
-
-                            UpdateEdge(id1, id2, cost);
-                            break;
-                        }
                     case "packets":
                         {
                             Console.WriteLine($"Total packets received: {packets}");
                             break;
                         }
                     case var val when new Regex(@"^update\s(\d{1,3})\s(\d{1,3})\s(\∞|\d)$").IsMatch(val):
-
                         {
                             var m = new Regex(@"^update\s(\d{1,3})\s(\d{1,3})\s(\∞|\d{1,3})$").Match(line);
                             int servEdge = Int32.Parse(m.Groups[1].Captures[0].Value);
@@ -347,11 +316,7 @@ namespace RouterApp
 
                     case "step":
                         {
-
-
-                            string[] updateArr = dist.Select(x => x.ToString()).ToArray();
-
-                            step(updateArr);
+                            Step();
                             //step(test2);
                             break;
                         }
@@ -359,7 +324,7 @@ namespace RouterApp
                         {
 
                             Console.WriteLine("CRASH occured: links set to infinity");
-                            crash(serverId);
+                            Crash(serverId);
                             SendCrash();
                             break;
                         }
@@ -573,17 +538,13 @@ namespace RouterApp
         }
 
 
-        public void UpdateRow(int rowNum, String[] newRowArr)
+        public void UpdateRow(int rowId, String[] newRowArr)
         {
-            rowNum--;
-
-            // start at 1 for newRowArr because newRowArr[0] is the row id 
             for (int j = 0; j < table.GetLength(1); j++)
             {
-
-                table[rowNum, j] = int.Parse(newRowArr[j + 2]);
+                table[rowId-1, j] = int.Parse(newRowArr[j]);
             }
-            // run bellman ford here 
+
             BellmanFord();
         }
 
@@ -602,6 +563,7 @@ namespace RouterApp
                     table[sourceId - 1, destId - 1] = linkCost;
                     table[destId - 1, sourceId - 1] = linkCost;
 
+                    /*
                     // send command to all other servers to update this edge 
                     for (int i = 0; i < ServerCount; i++)
                     {
@@ -609,10 +571,11 @@ namespace RouterApp
                         if(serverId != i+1 && parents[i] == serverId - 1)
                             Send(servers[i], $"globalUpdate {sourceId} {destId} {linkCost}");
                     }
+                    /**/
 
                     Console.WriteLine($"Edge {sourceId} {destId} was set to {linkCost}");
 
-                    DisplayTable();
+                    //DisplayTable();
                 }
                 else
                 {
@@ -623,25 +586,14 @@ namespace RouterApp
             BellmanFord();
         }
 
-        public void GlobalUpdate(int sourceId, int destId, int linkCost)
-        {
-
-            table[sourceId - 1, destId - 1] = linkCost;
-            table[destId - 1, sourceId - 1] = linkCost;
-
-            // We should do BellmanFord again
-            // not yet until I resolve the other issue    ------- i think i solved this
-            BellmanFord();
-        }
-
         // when we receive a disable message from another server we run this to disable those same edges
         // EX server1 calls disable 2
         //    sends message to server2 which results in this call disableEdge(source, destination)
         // important distinction this method allows us to change an edge of another server
-        public void disableEdge(int source, int destination)
+        public void DisableEdge(int sourceId, int destId)
         {
-            table[source - 1, destination - 1] = int.MaxValue;
-            table[destination - 1, source - 1] = int.MaxValue;
+            table[sourceId - 1, destId - 1] = int.MaxValue;
+            table[destId - 1, sourceId - 1] = int.MaxValue;
 
             // rerun bellman ford
             BellmanFord();
@@ -652,10 +604,10 @@ namespace RouterApp
         // send my routing update to everyone
         // this should send our DV aka the dist[]
         // giving an array as a parameter for testing.  I will change to dist once I make the other fixes
-        public void step(String[] stepArr)
+        public void Step()
         {
 
-            String stepMsg = $"UpdateRow {serverId} " + string.Join(" ", stepArr);
+            String stepMsg = $"UpdateRow {serverId} " + string.Join(" ", dist);
             Console.WriteLine("Sending step " + stepMsg);
 
             for (int i = 1; i <= ServerCount; i++)
@@ -676,7 +628,7 @@ namespace RouterApp
         }
 
         //crashes all connections to it and its connections to eerything else
-        public void crash(int crashId)
+        public void Crash(int crashId)
         {
             for (int i = 0; i < table.GetLength(0); i++)
             {
@@ -691,15 +643,15 @@ namespace RouterApp
         // tell all servers to handle this crash
         public void SendCrash()
         {
-            for (int i = 1; i <= ServerCount; i++)
+            for (int i = 0; i < ServerCount; i++)
             {
-                if (serverId == i)
+                if (serverId - 1 == i)
                 {
 
                 }
                 else
                 {
-                    Send(servers[i - 1], $"crash {serverId}");
+                    Send(servers[i], $"crash {serverId}");
                 }
             }
         }
@@ -729,14 +681,10 @@ namespace RouterApp
             int[] rowBefore = new int[table.Length];
             Buffer.BlockCopy(table, serverId, rowBefore, 0, 1);
             */
-            int[] prevDist = dist;
+            int[] prevDist = new int[dist.Length];
+            Array.Copy(dist, prevDist, dist.Length);
             Console.WriteLine("here is the copy");
-            Console.WriteLine(String.Join(",", prevDist));
-
-
-            // i think we need to reset the distance table in order for this to work
-            ResetDist();
-            Console.WriteLine("\nDistance Vector: ");
+            Console.WriteLine(String.Join(" ", prevDist));
 
             for (int k = 0; k < table.GetLength(0); k++)
             {
@@ -779,23 +727,29 @@ namespace RouterApp
                 }
             }
 
-            if (!prevDist.Equals(dist))
+            Console.Write($"prevDist: [");
+            foreach (int num in prevDist)
+                Console.Write($" {num} ");
+            Console.WriteLine("]");
+            Console.Write($"dist: [");
+            foreach (int num in dist)
+                Console.Write($" {num} ");
+            Console.WriteLine("]");
+
+            if (!Enumerable.SequenceEqual(prevDist, dist))
             {
                 Console.WriteLine("The dist was changed send the update to neighbors");
+                for(int i = 0; i < ServerCount; i++)
+                    if(serverId != i + 1 && parents[i] + 1 == serverId)
+                        Send(servers[i], $"UpdateRow {serverId} {string.Join(" ", dist)}");
+            }
+            else
+            {
+                Console.WriteLine("dist was NOT changed!");
             }
 
-
-
-            // the result of running the algorithm
-            Console.Write("Distance ");
-            Console.WriteLine("[{0}]", string.Join(", ", dist));
-            //Console.Write("Parent ");
-            //Console.WriteLine("[{0}]", string.Join(", ", parent));
-
-
-
-            int[] rowAfter = new int[table.Length];
-            Buffer.BlockCopy(table, serverId, rowAfter, 0, 1);
+            //int[] rowAfter = new int[table.Length];
+            //Buffer.BlockCopy(table, serverId, rowAfter, 0, 1);
             // If our new row is different from the cached row, broadcast an update.
             /*
             if (Enumerable.SequenceEqual(rowAfter, rowBefore))

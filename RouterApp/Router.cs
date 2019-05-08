@@ -126,6 +126,9 @@ namespace RouterApp
                         Array.Copy(receivedRow, 2, tmp, 0, receivedRow.Length - 2);
                         Console.WriteLine($"\trow: {string.Join(" ", tmp)}");
 
+                        if (missedIntervals[int.Parse(receivedRow[1]) - 1] == int.MaxValue);//update route
+                        missedIntervals[int.Parse(receivedRow[1])-1] = 0;
+
                         UpdateRow(rowId, tmp);
                         break;
                     case "update":
@@ -139,7 +142,10 @@ namespace RouterApp
                         Crash(int.Parse(receivedRow[1]));
                         break;
                     case "checkin":
-                        Console.WriteLine($"checkinf from {int.Parse(receivedRow[1])}");
+                        Console.Write($"checkinf from {int.Parse(receivedRow[1])}\nmissedIntervals - ");
+                        for(int i = 0; i < missedIntervals.Length; i++)
+                            Console.Write($"{i+1}: {missedIntervals[i]}\t");
+                        Console.WriteLine();
                         if (missedIntervals[int.Parse(receivedRow[1]) - 1] == int.MaxValue);//update route
                         missedIntervals[int.Parse(receivedRow[1])-1] = 0;
                         break;
@@ -183,9 +189,14 @@ namespace RouterApp
             for (int i = 0; i < table.Length; i++)
             {
                 if(i+1 != serverId)
-                    Send(servers[i], $"checkin {serverId}");
+                {
+                    Send(servers[i], $"UpdateRow {serverId} {string.Join( " ", MyRow)}");
+                    //Console.WriteLine($"{string.Join( " ", MyRow)}");
+                    //Send(servers[i], $"checkin {serverId}");
+                    //Console.WriteLine($"intervals: {string.Join(" ", missedIntervals)}");
+                }
                 // Only check neihbors who are not inf dist (disconnected)
-                if (serverId != i+1 && parents[i] + 1 == serverId && table[serverId - 1][i] != int.MaxValue)
+                if (serverId != i+1 && parents[i] + 1 == serverId && MyRow[i] != int.MaxValue)
                 {
                     //Console.WriteLine($"broadcast - {serverId} -> {i+1}");
                     // send a checkin broadcast
@@ -433,7 +444,7 @@ namespace RouterApp
 
             for (int i = 0; i < table.Length; i++)
             {
-                parents[i] = int.MaxValue;
+                parents[i] = serverId - 1;
                 for (int j = 0; j < table.Length; j++)
                 {
                     // set all entries to effectively infinity 
@@ -479,7 +490,6 @@ namespace RouterApp
                     table[serverId - 1][neighbor - 1] = weight;
                     parents[neighbor - 1] = serverId-1;
                 }
-                parents[serverId - 1] = serverId - 1;
                 table[serverId - 1][serverId - 1] = 0; // self connections are set to zero
             }
             catch (Exception e)
@@ -585,23 +595,13 @@ namespace RouterApp
         // update 1 2 7   where 1 is serverID, 2 is destId, and 7 is link cost 
         public void UpdateEdge(int sourceId, int destId, int linkCost)
         {
-            if ((sourceId < 1 || sourceId > ServerCount) || (destId < 1 || destId > ServerCount))
+            if(table[sourceId-1][destId-1] != linkCost)
             {
-                Console.WriteLine("Inputed server or edge does not exist!");
-            }
-            else
-            {
-                if(table[sourceId-1][destId-1] != linkCost)
-                {
-                    table[sourceId - 1][destId - 1] = linkCost;
-                    table[destId - 1][sourceId - 1] = linkCost;
-                }
-
-                Console.WriteLine($"Edge {sourceId} {destId} was set to {linkCost}");
-
-                //DisplayTable();
+                table[sourceId - 1][destId - 1] = linkCost;
+                table[destId - 1][sourceId - 1] = linkCost;
             }
 
+            Console.WriteLine($"Edge {sourceId}->{destId} was set to {linkCost}");
         }
 
         // when we receive a disable message from another server we run this to disable those same edges
@@ -679,7 +679,8 @@ namespace RouterApp
                     if ((table[i][j] != int.MaxValue && MyRow[i] != int.MaxValue) && 
                         (MyRow[i] + table[i][j] < MyRow[j]))
                     {
-                        Console.WriteLine($"\nMyRow[j] = MyRow[i] + table[i][j];\n{MyRow[j]} {MyRow[i]} + {table[i][j]} = {MyRow[i] + table[i][j]}");
+                        Console.WriteLine($"\nMyRow[j] = MyRow[i] + table[i][j];\n"+
+                            $"{MyRow[j]} {MyRow[i]} + {table[i][j]} = {MyRow[i] + table[i][j]}");
                         Console.WriteLine($"parents[j] = i;\n{parents[j]} = {i};\n");
                         //TODO: Shouldn't we be setting dist to inf if it is disconnected and let it match table?
                         MyRow[j] = MyRow[i] + table[i][j];

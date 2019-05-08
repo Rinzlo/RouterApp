@@ -45,6 +45,8 @@ namespace RouterApp
             }
         }
 
+        int[] MyRow { get { return table[serverId - 1];}}
+
         private UdpClient msgListener;
 
         private int toInterval;
@@ -61,8 +63,6 @@ namespace RouterApp
         /// holds parent indexes
         int[] parents;
 
-        int[] dist;
-
         int numEdges;
         int serverId;
         int packets = 0;       // counter for packets received  
@@ -76,7 +76,6 @@ namespace RouterApp
             DisplayTable();
             Console.WriteLine(Info);
 
-            BellmanFord();
             DisplayDist();
 
             //TODO: start msgListener with file read port
@@ -115,7 +114,7 @@ namespace RouterApp
                         Console.WriteLine($"Received command to disable server {sourceId + 1} {destId + 1}");
 
                         DisableEdge(sourceId, destId);
-                        
+                        BellmanFord();
                         break;
                     case "UpdateRow":
                         int rowId = int.Parse(receivedRow[1]);
@@ -140,6 +139,7 @@ namespace RouterApp
                         Crash(int.Parse(receivedRow[1]));
                         break;
                     case "checkin":
+                        Console.WriteLine($"checkinf from {int.Parse(receivedRow[1])}");
                         if (missedIntervals[int.Parse(receivedRow[1]) - 1] == int.MaxValue);//update route
                         missedIntervals[int.Parse(receivedRow[1])-1] = 0;
                         break;
@@ -183,23 +183,32 @@ namespace RouterApp
             for (int i = 0; i < table.Length; i++)
             {
                 // Only check neihbors who are not inf dist (disconnected)
-                if (serverId - 1 != i && parents[i] == serverId - 1 && table[serverId - 1][i] != int.MaxValue)
+                if (serverId != i+1 && parents[i] + 1 == serverId && table[serverId - 1][i] != int.MaxValue)
                 {
+                    Console.WriteLine($"broadcast - {serverId} -> {i+1}");
                     // send a checkin broadcast
                     Send(servers[i], $"checkin {serverId}");
                     if (missedIntervals[i] >= MAX_MISSED_INTERVALS)
                     {
                         //Disconnect from server i.
                         Console.WriteLine($"disconnecting router {i + 1}");
+
+                        //DisableEdge(serverId, i+1);
+                        /**/
                         UpdateEdge(serverId, i + 1, int.MaxValue);
                         // wipe out dropped row
                         UpdateRow(i+1, BlankRow);
+                        /**/
+                        parents[i] = int.MaxValue;
                         BellmanFord();
                     }
                     else
                     {
                         missedIntervals[i]++;
                     }
+                }else
+                {
+                    Console.WriteLine($"skipped {i+1}");
                 }
             }
         }
@@ -207,6 +216,7 @@ namespace RouterApp
         private void Run()
         {
             SetupMessageListener();
+            BroadcastRow();
 
             /**/
             Timer timer = new Timer(toInterval * 1000);
@@ -415,21 +425,17 @@ namespace RouterApp
             table = new int[servCount][];
             for(int i = 0; i < servCount; i++)
                 table[i] = new int[servCount];
-            dist = new int[servCount];
             parents = new int[servCount];
             missedIntervals = new int[servCount];
 
             for (int i = 0; i < table.Length; i++)
             {
-
-                dist[i] = int.MaxValue;
-
+                parents[i] = int.MaxValue;
                 for (int j = 0; j < table.Length; j++)
                 {
                     // set all entries to effectively infinity 
                     table[i][j] = int.MaxValue;
                 }
-
             }
             // need to move this for algorithm to work for each server 
             //dist[1] = 0;
@@ -468,9 +474,10 @@ namespace RouterApp
                     int neighbor = int.Parse(row[1]);
                     int weight = int.Parse(row[2]);
                     table[serverId - 1][neighbor - 1] = weight;
+                    parents[neighbor - 1] = serverId-1;
                 }
+                parents[serverId - 1] = serverId - 1;
                 table[serverId - 1][serverId - 1] = 0; // self connections are set to zero
-                dist[serverId - 1] = 0;
             }
             catch (Exception e)
             {
@@ -540,9 +547,9 @@ namespace RouterApp
 
         public void DisplayDist()
         {
-            for (int i = 0; i < dist.GetLength(0); i++)
+            for (int i = 0; i < ServerCount; i++)
             {
-                Console.WriteLine("Source-Server: " + (i + 1) + " Next-Hop: " + (parents[i] + 1) + " Cost of Path: " + dist[i]);
+                Console.WriteLine("Source-Server: " + (i + 1) + " Next-Hop: " + (parents[i] + 1) + " Cost of Path: " + table[serverId-1][i]);
             }
         }
 
@@ -587,16 +594,6 @@ namespace RouterApp
                     table[sourceId - 1][destId - 1] = linkCost;
                     table[destId - 1][sourceId - 1] = linkCost;
 
-                    /*
-                    // send command to all other servers to update this edge 
-                    for (int i = 0; i < ServerCount; i++)
-                    {
-                        // Only update neighbors
-                        if(serverId != i+1 && parents[i] == serverId - 1)
-                            Send(servers[i], $"globalUpdate {sourceId} {destId} {linkCost}");
-                    }
-                    /**/
-
                     Console.WriteLine($"Edge {sourceId} {destId} was set to {linkCost}");
 
                     //DisplayTable();
@@ -615,11 +612,11 @@ namespace RouterApp
         // important distinction this method allows us to change an edge of another server
         public void DisableEdge(int sourceId, int destId)
         {
-            UpdateEdge(destId, sourceId, int.MaxValue);
-            UpdateRow(sourceId, BlankRow);
+            UpdateEdge(sourceId, destId, int.MaxValue);
+            UpdateRow(destId, BlankRow);
+            parents[destId-1] = int.MaxValue;
 
             // rerun bellman ford
-            BellmanFord();
             // send if changed?
 
         }
@@ -630,13 +627,13 @@ namespace RouterApp
         public void Step()
         {
 
-            String stepMsg = $"UpdateRow {serverId} " + string.Join(" ", dist);
+            String stepMsg = $"UpdateRow {serverId} " + string.Join(" ", table[serverId-1]);
             Console.WriteLine("Sending step " + stepMsg);
 
             for (int i = 0; i < ServerCount; i++)
             {
                 // only send to neighbors
-                if (serverId != i+1 && parents[i] + 1 != serverId)
+                if (serverId != i+1 && parents[i] + 1 == serverId)
                     Send(servers[i - 1], stepMsg);
             }
         }
@@ -644,12 +641,9 @@ namespace RouterApp
         //crashes all connections to it and its connections to eerything else
         public void Crash(int crashId)
         {
-            for (int i = 0; i < table.GetLength(0); i++)
-            {
-                table[i][crashId - 1] = int.MaxValue;
-                table[crashId - 1][i] = int.MaxValue;
+                UpdateEdge(serverId, crashId, int.MaxValue);
+                UpdateRow(crashId, BlankRow);
 
-            }
             Console.WriteLine("crash: SUCCESS");
             BellmanFord();
         }
@@ -660,7 +654,7 @@ namespace RouterApp
             for (int i = 0; i < ServerCount; i++)
             {
                 // only send to neighbors
-                if (serverId != i + 1 && parents[i] + 1 != serverId)
+                if (serverId != i + 1 && parents[i] + 1 == serverId)
                     Send(servers[i], $"crash {serverId}");
             }
         }
@@ -673,33 +667,31 @@ namespace RouterApp
             int[] rowBefore = new int[table.Length];
             Buffer.BlockCopy(table, serverId, rowBefore, 0, 1);
             */
-            int[] prevDist = new int[dist.Length];
-            Array.Copy(dist, prevDist, dist.Length);
+            int[] prevDist = new int[ServerCount];
+            Array.Copy(table[serverId-1], prevDist, ServerCount);
             Console.WriteLine("here is the copy");
             Console.WriteLine(String.Join(" ", prevDist));
-
-            for (int k = 0; k < table.GetLength(0); k++)
+            Console.WriteLine("table.length: " + table.Length);
+            for (int i = 0; i < table.Length; i++)
             {
-                for (int i = 0; i < table.GetLength(0); i++)
+                for (int j = 0; j < table.Length; j++)
                 {
-                    for (int j = 0; j < table.Length; j++)
+                    if ((table[i][j] != int.MaxValue && MyRow[i] != int.MaxValue) && 
+                        (MyRow[i] + table[i][j] < MyRow[j]))
                     {
-                        if ((dist[i] + table[i][j] < dist[j]) && (table[i][j] != int.MaxValue && dist[i] != int.MaxValue))
+                        //TODO: Shouldn't we be setting dist to inf if it is disconnected and let it match table?
+                        MyRow[j] = MyRow[i] + table[i][j];
+                        parents[j] = i;
+                        int test = table[serverId-1][i] + table[i][j];
+                        Console.WriteLine($"dist[{i}] is {table[serverId-1][i]} table[{i},{j}] is {table[i][j]}");
+                        Console.WriteLine($"new edge value is {test} at {i}, {j}");
+
+                        // check if our servers row changed (serverid - 1) set a boolean to indicate this and later send this to all other servers
+                        // after we send this to the other servers we will need to set the boolean back to false
+
+                        if ((i + 1) == serverId)
                         {
-                            //TODO: Shouldn't we be setting dist to inf if it is disconnected and let it match table?
-                            dist[j] = dist[i] + table[i][j];
-                            parents[j] = i;
-                            int test = dist[i] + table[i][j];
-                            Console.WriteLine($"dist[{i}] is {dist[i]} table[{i},{j}] is {table[i][j]}");
-                            Console.WriteLine($"new edge value is {test} at {i}, {j}");
-
-                            // check if our servers row changed (serverid - 1) set a boolean to indicate this and later send this to all other servers
-                            // after we send this to the other servers we will need to set the boolean back to false
-
-                            if ((i + 1) == serverId)
-                            {
-                                Console.WriteLine("Table updated send this to all peers");
-                            }
+                            Console.WriteLine("Table updated send this to all peers");
                         }
                     }
                 }
@@ -712,7 +704,7 @@ namespace RouterApp
             {
                 for (int j = 0; j < table.Length; j++)
                 {
-                    if (dist[i] + table[i][j] < dist[j] && (table[i][j] != int.MaxValue && dist[i] != int.MaxValue))
+                    if (table[serverId-1][i] + table[i][j] < table[serverId-1][j] && (table[i][j] != int.MaxValue && table[serverId-1][i] != int.MaxValue))
                     {
                         Console.WriteLine("Negative weight cycle found");
                     }
@@ -723,16 +715,16 @@ namespace RouterApp
             foreach (int num in prevDist)
                 Console.Write($" {num} ");
             Console.WriteLine("]");
-            Console.Write($"dist: [");
-            foreach (int num in dist)
+            Console.Write($"table[serverId-1]: [");
+            foreach (int num in table[serverId-1])
                 Console.Write($" {num} ");
             Console.WriteLine("]");
 
-            if (!Enumerable.SequenceEqual(prevDist, dist))
+            if (!Enumerable.SequenceEqual(prevDist, table[serverId-1]))
             {
                 Console.WriteLine("The dist was changed send the update to neighbors");
                 for (int i = 0; i < table.Length; i++)
-                    table[serverId - 1][i] = dist[i];
+                    table[serverId - 1][i] = table[serverId-1][i];
                 BroadcastRow();
             }
             else
